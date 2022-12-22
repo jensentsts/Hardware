@@ -2,39 +2,34 @@
 #define __OLED_H__
 #include "stm32f10x.h"                  // Device header
 
-// For VSCode
-#ifdef VSCode
-typedef char 	int8_t;
-typedef short 	int16_t;
-typedef int		int32_t;
-typedef unsigned char 	uint8_t;
-typedef unsigned short 	uint16_t;
-typedef unsigned int 	uint32_t;
-#endif
+#define OLED_BUFFER_MODE				// 定义启用输出缓冲
+
+#define OLED_SCREEN_WIDTH 128
+#define OLED_SCREEN_HEIGHT 64
 
 void OLED_Init(void);
 void OLED_ClearScreen(void);
-void OLED_ClearBuffer(void);
-void OLED_Refresh(void);
 
 // 当做终端进行输出
-// 若设置 OLED_Setting_DirectlyOutput = 0，则输出不通过缓冲区，信息将直接输出到OLED屏幕上；不具备中断那种自动向上滚动的功能。
-// 若设置 OLED_Setting_DirectlyOutput = 1，则输出通过缓冲区，信息将先写入缓冲区，当调用 OLED_Refresh() 时，与缓冲区中的其他信息一起输出到屏幕上
+
+#ifndef OLED_BUFFER_MODE
 void OLED_Shell_ShowChar(uint8_t Line, uint8_t Column, char Char);
 void OLED_Shell_ShowString(uint8_t Line, uint8_t Column, char *String);
 void OLED_Shell_ShowNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
 void OLED_Shell_ShowSignedNum(uint8_t Line, uint8_t Column, int32_t Number, uint8_t Length);
 void OLED_Shell_ShowHexNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
 void OLED_Shell_ShowBinNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
+#endif
 
-#define OLED_SCREEN_WIDTH 129
-#define OLED_SCREEN_HEIGHT 65
-
+#ifdef OLED_BUFFER_MODE
 /* OLED屏上的颜色的枚举 */
 typedef enum{
 	BLACK = 0,							// 黑色
 	WHITE = 1							// 白色
 }OLED_ColorTypeDef;
+
+void OLED_ClearBuffer(void);
+void OLED_Refresh(void);
 
 void OLED_Dot(uint8_t ScreenX, uint8_t ScreenY, OLED_ColorTypeDef Color);
 void OLED_Line(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, OLED_ColorTypeDef Color);
@@ -53,5 +48,6 @@ void OLED_Graph(uint8_t ScreenX, uint8_t ScreenY, uint8_t Width, uint8_t Height,
 void OLED_WriteCommand(uint8_t Command);
 void OLED_WriteData(uint8_t Data);
 void OLED_SetCursor(uint8_t OLED_X, uint8_t OLED_Y);
+#endif	// OLED_BUFFER_MODE
 
 #endif	// __OLED_H__
