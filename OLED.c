@@ -32,7 +32,8 @@ sbit OLED_SDA = P0^0;					// SDA
 #ifdef OLED_BUFFER_MODE
 
 uint8_t OLED_Buffer[OLED_W][OLED_H / 8] = {0};
-uint8_t OLED_BufferUpdFlag = 0;				// 行更新标志，用于记录 buffer中的各行是否更新，按位存储，从低位到高位每一位的值与从第一行到第八行每一行的更新情况一一对应。
+uint8_t OLED_BufferLineUpdFlag = 0;				// 行更新标志，用于记录 buffer 中的各行是否更新，按位存储，从低位到高位每一位的值与从第一行到第八行每一行的更新情况一一对应。
+uint8_t OLED_BufferUpdLagFlag = 0;				// 如果某一行在上一次Refresh中更新了，那么它会记录标志，记录规则与 OLED_BufferLineUpdFlag 一致，并在下一次Refresh()时清楚此标志
 
 #endif	// OLED_BUFFER_MODE
 
@@ -116,7 +117,8 @@ void OLED_ClearScreen(void){
 
 void OLED_ClearBuffer(void){
 	uint8_t i, j;
-	for (j = 0; j < OLED_H / 8; ++j){
+	OLED_BufferLineUpdFlag = 0;
+	for (j = 0; j < 8; ++j){
 		OLED_SetCursor(0, j);
 		for (i = 0; i < OLED_W; ++i){
 			OLED_Buffer[i][j] = 0;
@@ -126,16 +128,20 @@ void OLED_ClearBuffer(void){
 
 void OLED_Refresh(void){
 	uint8_t i, j;
+	uint8_t OLED_BufferUpdFlag = OLED_BufferUpdLagFlag | OLED_BufferLineUpdFlag;
 	for (j = 0; j < 8; ++j){
 		if (OLED_BufferUpdFlag & 1){
 			OLED_SetCursor(0, j);
 			for (i = 0; i < 128; ++i){
 				OLED_WriteData(OLED_Buffer[i][j]);
+#ifdef OLED_BUFFER_CLEAR
 				OLED_Buffer[i][j] = 0;
+#endif
 			}
 		}
 		OLED_BufferUpdFlag >>= 1;
 	}
+	OLED_BufferUpdLagFlag = OLED_BufferLineUpdFlag;
 }
 
 #endif
@@ -194,7 +200,7 @@ void OLED_Init(void)
 #ifdef OLED_BUFFER_MODE
 
 	OLED_ClearBuffer();
-	OLED_BufferUpdFlag = 0;
+	OLED_BufferLineUpdFlag = 0;
 	
 #endif
 }
@@ -295,7 +301,7 @@ void OLED_Dot(uint8_t ScreenX, uint8_t ScreenY, OLED_ColorTypeDef Color){
 			Color_FrameAddition = Color << YOffset;
 	*Color_Frame ^= Color_FrameCondition ^ Color_FrameAddition;*/
 	*Color_Frame ^= ((*Color_Frame) & (1 << YOffset)) ^ (Color << YOffset);
-	OLED_BufferUpdFlag |= 1 << YIndex;
+	OLED_BufferLineUpdFlag |= 1 << YIndex;
 }
 
 void OLED_WritePage(uint8_t ScreenX, uint8_t ScreenY, uint8_t pageData){
@@ -310,12 +316,12 @@ void OLED_WritePage(uint8_t ScreenX, uint8_t ScreenY, uint8_t pageData){
 
 	*Color_Frame ^= (*Color_Frame) & (0xFF << YOffset);
 	*Color_Frame |= pageData << YOffset;
-	OLED_BufferUpdFlag |= 1 << YIndex;
+	OLED_BufferLineUpdFlag |= 1 << YIndex;
 
 	if (YIndex + 1 < OLED_H){
 		*(Color_Frame + 1) ^= (*(Color_Frame + 1)) & (0xFF >> (8 - YOffset));
 		*(Color_Frame + 1) |= pageData >> (8 - YOffset);
-		OLED_BufferUpdFlag |= 1 << (YIndex + 1);
+		OLED_BufferLineUpdFlag |= 1 << (YIndex + 1);
 	}
 }
 
@@ -386,11 +392,11 @@ void OLED_ShowSignedNum(uint8_t ScreenX, uint8_t ScreenY, int32_t Number, uint8_
 }
 
 void OLED_Line(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, OLED_ColorTypeDef Color){
-	int di;
-	int dx;
-	int dy;
-	int gx;
-	int gy;
+	uint8_t di;
+	uint8_t dx;
+	uint8_t dy;
+	uint8_t gx;
+	uint8_t gy;
 	di = 0;
 	gx = (ScreenX2 > ScreenX1) ? 1 : -1;
 	gy = (ScreenY2 > ScreenY1) ? 1 : -1;
@@ -426,11 +432,14 @@ void OLED_Line(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t Scr
 	}
 }
 
-// 没有 (ScreenX1, ScreenY1) -> (ScreenX2, ScreenY2) 的合法性判断，请自行保证输入的合法性
+// 没有 (ScreenX1, ScreenY1) -> (ScreenX2, ScreenY2)
 void OLED_Square(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t Fill, OLED_ColorTypeDef Color){
 	uint16_t i, j;
 	uint8_t pageData = (uint8_t)0x00 - Color,
-			YOffset = 8 - ((ScreenY2 - ScreenY1) % 8);
+			YOffset = /*8 - */((ScreenY2 - ScreenY1) % 8);
+	if (ScreenX1 > ScreenX2 || ScreenY1 > ScreenY2){
+		return;
+	}
 	if (Fill == 1){
 		for (i = ScreenX1; i <= ScreenX2; ++i){
 			for (j = ScreenY1; j <= ScreenY2 - 8; j += 8){
@@ -446,20 +455,72 @@ void OLED_Square(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t S
 	OLED_Line(ScreenX2, ScreenY2, ScreenX2, ScreenY1, Color);
 }
 
-void OLED_Circle(uint8_t ScreenX, uint8_t ScreenY, uint16_t Radius, uint8_t Fill, OLED_ColorTypeDef Color){
-	int  xi;
-	int  yi;
-	int  di;
+
+void OLED_FilletMatrix(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t Radius, uint8_t Fill, OLED_ColorTypeDef Color){
+	int xi;
+	int yi;
+	int di;
+	if (ScreenX1 > ScreenX2 || ScreenY1 > ScreenY2){
+		return;
+	}
+	// limit the radius within (ScreenY2 - ScreenY1) / 2
+	if (Radius > (ScreenY2 - ScreenY1) / 2){
+		Radius = (ScreenY2 - ScreenY1) / 2;
+	}
+	// if filled
+	if (Fill == 1){
+		OLED_Square(ScreenX1 + Radius, ScreenY1, ScreenX2 - Radius, ScreenY1 + Radius, 1, Color);
+		OLED_Square(ScreenX1, ScreenY1 + Radius, ScreenX2, ScreenY2 - Radius, 1, Color);
+		OLED_Square(ScreenX1 + Radius, ScreenY2 - Radius, ScreenX2 - Radius, ScreenY2, 1, Color);
+		OLED_Circle(ScreenX1 + Radius, ScreenY1 + Radius, Radius, 1, Color);
+		OLED_Circle(ScreenX1 + Radius, ScreenY2 - Radius, Radius, 1, Color);
+		OLED_Circle(ScreenX2 - Radius, ScreenY1 + Radius, Radius, 1, Color);
+		OLED_Circle(ScreenX2 - Radius, ScreenY2 - Radius, Radius, 1, Color);
+		return;
+	}
+	// if not filled
+	OLED_Line(ScreenX1, ScreenY1 + Radius, ScreenX1, ScreenY2 - Radius, Color);
+	OLED_Line(ScreenX1 + Radius, ScreenY1, ScreenX2 - Radius, ScreenY1, Color);
+	OLED_Line(ScreenX2 - Radius, ScreenY2, ScreenX1 + Radius, ScreenY2, Color);
+	OLED_Line(ScreenX2, ScreenY2 - Radius, ScreenX2, ScreenY1 + Radius, Color);
 	di = 0 - (Radius >> 1);
 	xi = 0;
 	yi = Radius;
 	while(yi >= xi){
-		OLED_Dot(ScreenX + xi - 1, ScreenY + yi - 1, Color);
+		OLED_Dot(ScreenX2 - Radius + yi - 1, ScreenY1 + Radius - xi, Color);
+		OLED_Dot(ScreenX2 - Radius + xi - 1, ScreenY1 + Radius - yi, Color);
+		OLED_Dot(ScreenX1 + Radius - xi, ScreenY1 + Radius - yi, Color);
+		OLED_Dot(ScreenX1 + Radius - yi, ScreenY1 + Radius - xi, Color);
+		OLED_Dot(ScreenX1 + Radius - yi, ScreenY2 - Radius + xi - 1, Color);
+		OLED_Dot(ScreenX1 + Radius - xi, ScreenY2 - Radius + yi - 1, Color);
+		OLED_Dot(ScreenX2 - Radius + xi - 1, ScreenY2 - Radius + yi - 1, Color);
+		OLED_Dot(ScreenX2 - Radius + yi - 1, ScreenY2 - Radius + xi - 1, Color);
+		xi++;
+		if (di < 0){
+			di += xi;
+		}
+		else{
+			yi--;
+			di += xi - yi;
+		}
+	}
+	
+}
+
+void OLED_Circle(uint8_t ScreenX, uint8_t ScreenY, uint16_t Radius, uint8_t Fill, OLED_ColorTypeDef Color){
+	int xi;
+	int yi;
+	int di;
+	di = 0 - (Radius >> 1);
+	xi = 0;
+	yi = Radius;
+	while(yi >= xi){
 		OLED_Dot(ScreenX + yi - 1, ScreenY + xi - 1, Color);
-		OLED_Dot(ScreenX - xi, ScreenY + yi - 1, Color);
-		OLED_Dot(ScreenX - yi, ScreenY + xi - 1, Color);
+		OLED_Dot(ScreenX + xi - 1, ScreenY + yi - 1, Color);
 		OLED_Dot(ScreenX - xi, ScreenY - yi, Color);
 		OLED_Dot(ScreenX - yi, ScreenY - xi, Color);
+		OLED_Dot(ScreenX - xi, ScreenY + yi - 1, Color);
+		OLED_Dot(ScreenX - yi, ScreenY + xi - 1, Color);
 		OLED_Dot(ScreenX + xi - 1, ScreenY - yi, Color);
 		OLED_Dot(ScreenX + yi - 1, ScreenY - xi, Color);
 		xi++;

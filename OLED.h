@@ -3,6 +3,7 @@
 #include "stm32f10x.h"                  // Device header
 
 #define OLED_BUFFER_MODE				// 定义启用输出缓冲
+#define OLED_BUFFER_CLEAR				// 是否在每次Refresh后清除buffer中的内容
 
 #define OLED_SCREEN_WIDTH 128
 #define OLED_SCREEN_HEIGHT 64
@@ -34,6 +35,7 @@ void OLED_Refresh(void);
 void OLED_Dot(uint8_t ScreenX, uint8_t ScreenY, OLED_ColorTypeDef Color);
 void OLED_Line(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, OLED_ColorTypeDef Color);
 void OLED_Square(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t Fill, OLED_ColorTypeDef Color);
+void OLED_FilletMatrix(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t radius, uint8_t Fill, OLED_ColorTypeDef Color);
 void OLED_Circle(uint8_t ScreenX, uint8_t ScreenY, uint16_t radius, uint8_t Fill, OLED_ColorTypeDef Color);		// TODO：实现填充圆的绘制（目前：画一个普通的空白的圆形）
 
 void OLED_ShowChar(uint8_t ScreenX, uint8_t ScreenY, char Char, OLED_ColorTypeDef Color);
