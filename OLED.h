@@ -18,8 +18,8 @@ void OLED_Shell_ShowChar(uint8_t Line, uint8_t Column, char Char);
 void OLED_Shell_ShowString(uint8_t Line, uint8_t Column, char *String);
 void OLED_Shell_ShowNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
 void OLED_Shell_ShowSignedNum(uint8_t Line, uint8_t Column, int32_t Number, uint8_t Length);
-void OLED_Shell_ShowHexNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
-void OLED_Shell_ShowBinNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
+void OLED_Shell_ShowHex(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
+void OLED_Shell_ShowBin(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
 #endif
 
 #ifdef OLED_BUFFER_MODE
@@ -42,6 +42,8 @@ void OLED_ShowChar(uint8_t ScreenX, uint8_t ScreenY, char Char, OLED_ColorTypeDe
 void OLED_ShowString(uint8_t ScreenX, uint8_t ScreenY, char *String, OLED_ColorTypeDef Color);
 void OLED_ShowNum(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length, OLED_ColorTypeDef Color);
 void OLED_ShowSignedNum(uint8_t ScreenX, uint8_t ScreenY, int32_t Number, uint8_t Length, OLED_ColorTypeDef Color);
+void OLED_ShowHex(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length);
+void OLED_ShowBin(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length);
 
 void OLED_WritePage(uint8_t ScreenX, uint8_t ScreenY, uint8_t pageData);
 uint8_t OLED_ReadPage(uint8_t ScreenX, uint8_t ScreenY);

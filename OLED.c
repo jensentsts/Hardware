@@ -271,7 +271,7 @@ void OLED_Shell_ShowSignedNum(uint8_t Line, uint8_t Column, int32_t Number, uint
 	}
 }
 
-void OLED_Shell_ShowHexNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length)
+void OLED_Shell_ShowHex(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length)
 {
 	uint8_t i, SingleNumber;
 	for (i = 0; i < Length; ++i){
@@ -282,6 +282,13 @@ void OLED_Shell_ShowHexNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_
 		else{
 			OLED_Shell_ShowChar(Line, Column + i, SingleNumber - 10 + 'A');
 		}
+	}
+}
+
+void OLED_Shell_ShowBin(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length){
+	while (Length--){
+		OLED_Shell_ShowChar(Line, Column + Length, Number & 1 + '0');
+		Number >>= 1;
 	}
 }
 
@@ -388,6 +395,30 @@ void OLED_ShowSignedNum(uint8_t ScreenX, uint8_t ScreenY, int32_t Number, uint8_
 	for (i = Length - 1; i >= Length; i--){
 		OLED_ShowChar(ScreenX + i + 8, ScreenY, shownNumber % 10 + '0', Color);
 		shownNumber /= 10;
+	}
+}
+
+void OLED_ShowHex(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length)
+{
+	uint8_t i, SingleNumber;
+	uint16_t power = 16 << (Length - 1);
+	for (i = 0; i < Length; ++i){
+		//SingleNumber = Number / OLED_Pow(16, Length - i - 1) % 16;
+		SingleNumber = Number / power % 16;
+		power >>= 1;
+		if (SingleNumber < 10){
+			OLED_ShowChar(ScreenX + i * 8, ScreenY, SingleNumber + '0');
+		}
+		else{
+			OLED_ShowChar(ScreenX + i * 8, ScreenY, SingleNumber - 10 + 'A');
+		}
+	}
+}
+
+void OLED_ShowBin(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length){
+	while (Length--){
+		OLED_ShowChar(ScreenX + Length * 8, ScreenY, Number & 1 + '0');
+		Number >>= 1;
 	}
 }
 
