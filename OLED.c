@@ -1,9 +1,12 @@
+#include "stm32f10x.h"                  // Device header
+#include "misc.h"
 #include "OLED_Font.h"
 #include "OLED.h"
-#include "stm32f10x.h"                  // Device header
 
 #define OLED_W 128						// 宽度
 #define OLED_H 64						// 高度
+
+/***************************************************************/
 
 #ifdef __STC89C5xRC_RDP_H__
 
@@ -17,17 +20,19 @@ sbit OLED_SDA = P0^0;					// SDA
 
 #ifdef __STM32F10x_H
 
-#define OLED_RCC RCC_APB2Periph_GPIOA
+#define OLED_RCC RCC_APB2Periph_GPIOB
 
-#define OLED_GPIOX_SCL GPIOA
-#define OLED_PIN_SCL GPIO_Pin_6
-#define OLED_GPIOX_SDA GPIOA
-#define OLED_PIN_SDA GPIO_Pin_5
+#define OLED_GPIOx_SCL GPIOB
+#define OLED_Pin_SCL GPIO_Pin_10
+#define OLED_GPIOx_SDA GPIOB
+#define OLED_Pin_SDA GPIO_Pin_11
 
-#define OLED_SCL_w(x) GPIO_WriteBit(OLED_GPIOX_SCL, OLED_PIN_SCL, (BitAction)(x));
-#define OLED_SDA_w(x) GPIO_WriteBit(OLED_GPIOX_SDA, OLED_PIN_SDA, (BitAction)(x));
+#define OLED_SCL_w(x) GPIO_WriteBit(OLED_GPIOx_SCL, OLED_Pin_SCL, (BitAction)(x));
+#define OLED_SDA_w(x) GPIO_WriteBit(OLED_GPIOx_SDA, OLED_Pin_SDA, (BitAction)(x));
 
 #endif
+
+/***************************************************************/
 
 #ifdef OLED_BUFFER_MODE
 
@@ -37,20 +42,17 @@ uint8_t OLED_BufferUpdLagFlag = 0;				// 如果某一行在上一次Refresh中�
 
 #endif	// OLED_BUFFER_MODE
 
-
 void OLED_I2C_Init(void){
 	#ifdef __STM32F10x_H
-
     RCC_APB2PeriphClockCmd(OLED_RCC, ENABLE);
 
 	GPIO_InitTypeDef GPIO_InitStructure;
  	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_InitStructure.GPIO_Pin = OLED_PIN_SCL;
- 	GPIO_Init(OLED_GPIOX_SCL, &GPIO_InitStructure);
-	GPIO_InitStructure.GPIO_Pin = OLED_PIN_SDA;
- 	GPIO_Init(OLED_GPIOX_SDA, &GPIO_InitStructure);
-
+	GPIO_InitStructure.GPIO_Pin = OLED_Pin_SCL;
+ 	GPIO_Init(OLED_GPIOx_SCL, &GPIO_InitStructure);
+	GPIO_InitStructure.GPIO_Pin = OLED_Pin_SDA;
+ 	GPIO_Init(OLED_GPIOx_SDA, &GPIO_InitStructure);
 	#endif
 	
 	OLED_SDA_w(1);
@@ -98,9 +100,13 @@ void OLED_WriteData(uint8_t Data){
 }
 
 void OLED_SetCursor(uint8_t X, uint8_t Y){
-	OLED_WriteCommand(0xB0 | Y);					//设置Y位置
-	OLED_WriteCommand(0x10 | ((X & 0xF0) >> 4));	//设置X位置低4位
-	OLED_WriteCommand(0x00 | (X & 0x0F));			//设置X位置高4位
+	OLED_I2C_Start();
+	OLED_I2C_SendByte(0x78);		// 从机地址
+	OLED_I2C_SendByte(0x00);		// 写命令
+	OLED_I2C_SendByte(0xB0 | Y);			// 发送命令
+	OLED_I2C_SendByte(0x10 | ((X & 0xF0) >> 4));			// 发送命令
+	OLED_I2C_SendByte(0x00 | (X & 0x0F));			// 发送命令
+	OLED_I2C_Stop();
 }
 
 void OLED_ClearScreen(void){
@@ -114,7 +120,6 @@ void OLED_ClearScreen(void){
 }
 
 #ifdef OLED_BUFFER_MODE
-
 void OLED_ClearBuffer(void){
 	uint8_t i, j;
 	OLED_BufferLineUpdFlag = 0;
@@ -132,19 +137,22 @@ void OLED_Refresh(void){
 	for (j = 0; j < 8; ++j){
 		if (OLED_BufferUpdFlag & 1){
 			OLED_SetCursor(0, j);
+			OLED_I2C_Start();
+			OLED_I2C_SendByte(0x78);		// 从机地址
+			OLED_I2C_SendByte(0x40);		// 写数据
 			for (i = 0; i < 128; ++i){
-				OLED_WriteData(OLED_Buffer[i][j]);
+				OLED_I2C_SendByte(OLED_Buffer[i][j]);
 #ifdef OLED_BUFFER_CLEAR
 				OLED_Buffer[i][j] = 0;
-#endif
+#endif // OLED_BUFFER_CLEAR
 			}
 		}
+		OLED_I2C_Stop();
 		OLED_BufferUpdFlag >>= 1;
 	}
 	OLED_BufferUpdLagFlag = OLED_BufferLineUpdFlag;
 }
-
-#endif
+#endif // OLED_BUFFER_MODE
 
 void OLED_Init(void)
 {
@@ -398,26 +406,23 @@ void OLED_ShowSignedNum(uint8_t ScreenX, uint8_t ScreenY, int32_t Number, uint8_
 	}
 }
 
-void OLED_ShowHex(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length)
+void OLED_ShowHex(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length, OLED_ColorTypeDef Color)
 {
 	uint8_t i, SingleNumber;
-	uint16_t power = 16 << (Length - 1);
 	for (i = 0; i < Length; ++i){
-		//SingleNumber = Number / OLED_Pow(16, Length - i - 1) % 16;
-		SingleNumber = Number / power % 16;
-		power >>= 1;
+		SingleNumber = Number / OLED_Pow(16, Length - i - 1) % 16;
 		if (SingleNumber < 10){
-			OLED_ShowChar(ScreenX + i * 8, ScreenY, SingleNumber + '0');
+			OLED_ShowChar(ScreenX + i * 8, ScreenY, SingleNumber + '0', Color);
 		}
 		else{
-			OLED_ShowChar(ScreenX + i * 8, ScreenY, SingleNumber - 10 + 'A');
+			OLED_ShowChar(ScreenX + i * 8, ScreenY, SingleNumber - 10 + 'A', Color);
 		}
 	}
 }
 
-void OLED_ShowBin(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length){
+void OLED_ShowBin(uint8_t ScreenX, uint8_t ScreenY, uint32_t Number, uint8_t Length, OLED_ColorTypeDef Color){
 	while (Length--){
-		OLED_ShowChar(ScreenX + Length * 8, ScreenY, Number & 1 + '0');
+		OLED_ShowChar(ScreenX + Length * 8, ScreenY, Number & 1 + '0', Color);
 		Number >>= 1;
 	}
 }
