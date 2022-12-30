@@ -1,5 +1,6 @@
-#include "LCD144.h"
 #include "stm32f10x.h"                  // Device header
+#include "LCD144.h"
+#include "LCD144_Font_ASCII.h"
 
 #define LCD144_W 128
 #define LCD144_H 128
@@ -341,16 +342,22 @@ void LCD144_ShowChar(uint8_t X, uint8_t Y, char Char, uint16_t fc, uint16_t bc){
         }
     }
 #else
-    LCD144_SetRegion(X, Y, X + 8 - 1, Y + 16 - 1);
-    for (i = 0; i < 16; ++i){
+    LCD144_SetRegion(X, Y, 
+	X + 8 - 1 > LCD144_W - 1 ? LCD144_W - 1 : X + 8 - 1, 
+	Y + 16 - 1 > LCD144_H - 1 ? LCD144_H -  1 : Y + 16 - 1);
+    LCD144_CS_w(0);
+    LCD144_DC_w(1);
+    for (i = 0; i < 16 && i + Y < LCD144_H; ++i){
         fontCache = LCD144_F8x16[Char - ' '][i];
-        for (j = 0; j < 8; ++j){
-            LCD144_WriteData_16Bit(fontCache & 1 ? fc : bc);
+        for (j = 0; j < 8 && j + X < LCD144_W; ++j){
+            //LCD144_WriteData_16Bit(fontCache & 1 ? fc : bc);
+			LCD144_SPI_Send8Byte((fontCache & 1 ? fc : bc) >> 8);     // 高八位
+			LCD144_SPI_Send8Byte(fontCache & 1 ? fc : bc);          // 低八位
             fontCache >>= 1;
         }
     }
+    LCD144_CS_w(1);
 #endif // LCD144_BUFFER_MODE
-
 }
 
 /*
@@ -509,13 +516,24 @@ void LCD144_ShowGraph(uint8_t X, uint8_t Y, uint16_t *Graph, uint8_t Width, uint
         }
     }
 #else
-    LCD144_SetRegion(X, Y, X + Width, Y + Height);
-    for (i = 0; i < Height; ++i){
-        for (j = 0; j < Width; ++j){
-            LCD144_WriteData_16Bit(*Graph);
+    LCD144_SetRegion(X, Y, 
+	X + Width - 1 > LCD144_W - 1 ? LCD144_W - 1 : X + Width - 1, 
+	Y + Height - 1 > LCD144_H - 1 ? LCD144_H - 1 : Y + Height - 1);
+	
+    LCD144_CS_w(0);
+    LCD144_DC_w(1);
+    for (i = 0; i < Height && i + Y < LCD144_H; ++i){
+        for (j = 0; j < Width && j + X < LCD144_W; ++j){
+            //LCD144_WriteData_16Bit(*Graph);
+			LCD144_SPI_Send8Byte(*Graph >> 8);     // 高八位
+			LCD144_SPI_Send8Byte(*Graph);          // 低八位
             ++Graph;
         }
+		for (; j < Width; ++j){
+			++Graph;
+		}
     }
+    LCD144_CS_w(1);
 #endif
 }
 

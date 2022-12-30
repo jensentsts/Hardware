@@ -1,7 +1,7 @@
 #ifndef __LED144_H__
 #define __LED144_H__
 
-#include "LCD144_Font_ASCII.h"
+//#include "LCD144_Font_ASCII.h"
 //#include "LCD144_Font_GBK.h"
 #include "stm32f10x.h"                  // Device header
 
@@ -24,7 +24,6 @@
 
 uint16_t LCD144_RGB888toRGB565(uint32_t RGB888Color);
 uint32_t LCD144_RGB565toRGB888(uint32_t RGB565Color);
-
 void LCD144_Init(void);
 void LCD144_Clear(void);
 void LCD144_SetRegion(uint8_t XStart, uint8_t YStart, uint8_t XEnd, uint8_t YEnd);
