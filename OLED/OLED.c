@@ -40,6 +40,9 @@ uint8_t OLED_Buffer[OLED_W][OLED_H / 8] = {0};
 uint8_t OLED_BufferLineUpdFlag = 0;				// 行更新标志，用于记录 buffer 中的各行是否更新，按位存储，从低位到高位每一位的值与从第一行到第八行每一行的更新情况一一对应。
 uint8_t OLED_BufferUpdLagFlag = 0;				// 如果某一行在上一次Refresh中更新了，那么它会记录标志，记录规则与 OLED_BufferLineUpdFlag 一致，并在下一次Refresh()时清楚此标志
 
+void (*OLED_DotProcess)(uint8_t *Color_Frame, uint8_t YOffset, uint8_t YIndex, OLED_ColorTypeDef Color);	// 处理函数
+void (*OLED_ColorFrameProcess)(uint8_t *Color_Frame, uint8_t YOffset, uint8_t YIndex, uint8_t pageData);	// 处理函数
+
 #endif	// OLED_BUFFER_MODE
 
 void OLED_I2C_Init(void){
@@ -103,9 +106,9 @@ void OLED_SetCursor(uint8_t X, uint8_t Y){
 	OLED_I2C_Start();
 	OLED_I2C_SendByte(0x78);		// 从机地址
 	OLED_I2C_SendByte(0x00);		// 写命令
-	OLED_I2C_SendByte(0xB0 | Y);			// 发送命令
-	OLED_I2C_SendByte(0x10 | ((X & 0xF0) >> 4));			// 发送命令
-	OLED_I2C_SendByte(0x00 | (X & 0x0F));			// 发送命令
+	OLED_I2C_SendByte(0xB0 | Y);	// Y坐标
+	OLED_I2C_SendByte(0x10 | ((X & 0xF0) >> 4));	// 高八位
+	OLED_I2C_SendByte(0x00 | (X & 0x0F));			// 低八位
 	OLED_I2C_Stop();
 }
 
@@ -113,9 +116,13 @@ void OLED_ClearScreen(void){
 	uint8_t i, j;
 	for (j = 0; j < OLED_H / 8; ++j){
 		OLED_SetCursor(0, j);
+		OLED_I2C_Start();
+		OLED_I2C_SendByte(0x78);	// 从机地址
+		OLED_I2C_SendByte(0x40);	// 写数据
 		for (i = 0; i < OLED_W; ++i){
-			OLED_WriteData(0x00);
+			OLED_I2C_SendByte(0x00);
 		}
+		OLED_I2C_Stop();
 	}
 }
 
@@ -154,65 +161,6 @@ void OLED_Refresh(void){
 }
 #endif // OLED_BUFFER_MODE
 
-void OLED_Init(void)
-{
-	uint32_t i, j;
-	
-	//上电延时
-	for (i = 0; i < 1000; i++) {
-		for (j = 0; j < 1000; j++);
-	}
-	
-	OLED_I2C_Init();			//端口初始化
-	
-	OLED_WriteCommand(0xAE);	//关闭显示
-	
-	OLED_WriteCommand(0xD5);	//设置显示时钟分频比/振荡器频率
-	OLED_WriteCommand(0x80);
-	
-	OLED_WriteCommand(0xA8);	//设置多路复用率
-	OLED_WriteCommand(0x3F);
-	
-	OLED_WriteCommand(0xD3);	//设置显示偏移
-	OLED_WriteCommand(0x00);
-	
-	OLED_WriteCommand(0x40);	//设置显示开始行
-	
-	OLED_WriteCommand(0xA1);	//设置左右方向，0xA1正常 0xA0左右反置
-	
-	OLED_WriteCommand(0xC8);	//设置上下方向，0xC8正常 0xC0上下反置
-
-	OLED_WriteCommand(0xDA);	//设置COM引脚硬件配置
-	OLED_WriteCommand(0x12);
-	
-	OLED_WriteCommand(0x81);	//设置对比度控制
-	OLED_WriteCommand(0xCF);
-
-	OLED_WriteCommand(0xD9);	//设置预充电周期
-	OLED_WriteCommand(0xF1);
-
-	OLED_WriteCommand(0xDB);	//设置VCOMH取消选择级别
-	OLED_WriteCommand(0x30);
-
-	OLED_WriteCommand(0xA4);	//设置整个显示打开/关闭
-
-	OLED_WriteCommand(0xA6);	//设置正常/倒转显示
-
-	OLED_WriteCommand(0x8D);	//设置充电泵
-	OLED_WriteCommand(0x14);
-
-	OLED_WriteCommand(0xAF);	//开启显示
-		
-	OLED_ClearScreen();			//OLED清屏
-
-#ifdef OLED_BUFFER_MODE
-
-	OLED_ClearBuffer();
-	OLED_BufferLineUpdFlag = 0;
-	
-#endif
-}
-
 void OLED_Shell_ShowChar(uint8_t Line, uint8_t Column, char Char){
 	uint8_t i;
 #ifdef OLED_BUFFER_MODE
@@ -236,7 +184,7 @@ void OLED_Shell_ShowChar(uint8_t Line, uint8_t Column, char Char){
 #endif
 }
 
-void OLED_Shell_ShowString(uint8_t Line, uint8_t Column, char *String)
+void OLED_Shell_ShowStr(uint8_t Line, uint8_t Column, char *String)
 {
 	uint8_t i;
 	for (i = 0; String[i] != '\0'; ++i){
@@ -302,40 +250,60 @@ void OLED_Shell_ShowBin(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t L
 
 #ifdef OLED_BUFFER_MODE
 
+void OLED_DotProcess_Default(uint8_t *Color_Frame, uint8_t YOffset, uint8_t YIndex, OLED_ColorTypeDef Color){
+	/*uint8_t Color_FrameCondition = (*Color_Frame) & (1 << YOffset),
+			Color_FrameAddition = Color << YOffset;
+	*Color_Frame ^= Color_FrameCondition ^ Color_FrameAddition;*/
+	*Color_Frame ^= ((*Color_Frame) & (1 << YOffset)) ^ (Color << YOffset);
+}
+
+void OLED_DotProcess_Xor(uint8_t *Color_Frame, uint8_t YOffset, uint8_t YIndex, OLED_ColorTypeDef Color){
+	*Color_Frame ^= Color << YOffset;
+}
+
 void OLED_Dot(uint8_t ScreenX, uint8_t ScreenY, OLED_ColorTypeDef Color){
 	uint8_t XIndex = ScreenX,
 			YIndex = ScreenY / 8,
 			YOffset = ScreenY % 8;
-	uint8_t *Color_Frame = &OLED_Buffer[XIndex][YIndex];
 
 	if (ScreenY >= OLED_H || ScreenX >= OLED_W){
 		return;
 	}
 
-	/*uint8_t Color_FrameCondition = (*Color_Frame) & (1 << YOffset),
-			Color_FrameAddition = Color << YOffset;
-	*Color_Frame ^= Color_FrameCondition ^ Color_FrameAddition;*/
-	*Color_Frame ^= ((*Color_Frame) & (1 << YOffset)) ^ (Color << YOffset);
+	OLED_ColorFrameProcess(&OLED_Buffer[XIndex][YIndex], YOffset, YIndex, Color);
 	OLED_BufferLineUpdFlag |= 1 << YIndex;
+}
+
+void OLED_ColorFrameProcess_Default(uint8_t *Color_Frame, uint8_t YOffset, uint8_t YIndex, uint8_t pageData){
+	*Color_Frame ^= (*Color_Frame) & (0xFF << YOffset);
+	*Color_Frame |= pageData << YOffset;
+
+	if (YIndex + 1 < OLED_H / 8){
+		*(Color_Frame + 1) ^= (*(Color_Frame + 1)) & (0xFF >> (8 - YOffset));
+		*(Color_Frame + 1) |= pageData >> (8 - YOffset);
+	}
+}
+
+void OLED_ColorFrameProcess_Xor(uint8_t *Color_Frame, uint8_t YOffset, uint8_t YIndex, uint8_t pageData){
+	*Color_Frame ^= pageData << YOffset;
+
+	if (YIndex + 1 < OLED_H / 8){
+		*(Color_Frame + 1) ^= pageData >> (8 - YOffset);
+	}
 }
 
 void OLED_WritePage(uint8_t ScreenX, uint8_t ScreenY, uint8_t pageData){
 	uint8_t XIndex = ScreenX,
 			YIndex = ScreenY / 8,
 			YOffset = ScreenY % 8;
-	uint8_t *Color_Frame = &OLED_Buffer[XIndex][YIndex];
 
 	if (ScreenY >= OLED_H || ScreenX >= OLED_W){
 		return;
 	}
-
-	*Color_Frame ^= (*Color_Frame) & (0xFF << YOffset);
-	*Color_Frame |= pageData << YOffset;
+	
+	OLED_ColorFrameProcess(&OLED_Buffer[XIndex][YIndex], YOffset, YIndex, pageData);
 	OLED_BufferLineUpdFlag |= 1 << YIndex;
-
-	if (YIndex + 1 < OLED_H){
-		*(Color_Frame + 1) ^= (*(Color_Frame + 1)) & (0xFF >> (8 - YOffset));
-		*(Color_Frame + 1) |= pageData >> (8 - YOffset);
+	if (YIndex + 1 < OLED_H / 8){
 		OLED_BufferLineUpdFlag |= 1 << (YIndex + 1);
 	}
 }
@@ -354,7 +322,7 @@ uint8_t OLED_ReadPage(uint8_t ScreenX, uint8_t ScreenY){
 
 	res = (*Color_Frame) & (0xFF <<  YOffset);
 	
-	if (YIndex + 1 < OLED_H){
+	if (YIndex + 1 < OLED_H / 8){
 		res |= (*(Color_Frame + 1)) & (0xFF >> (8 - YOffset));
 	}
 
@@ -374,7 +342,7 @@ void OLED_ShowChar(uint8_t ScreenX, uint8_t ScreenY, char Char, OLED_ColorTypeDe
 	}
 }
 
-void OLED_ShowString(uint8_t ScreenX, uint8_t ScreenY, char *String, OLED_ColorTypeDef Color){
+void OLED_ShowStr(uint8_t ScreenX, uint8_t ScreenY, char *String, OLED_ColorTypeDef Color){
 	uint8_t i;
 	for (i = 0; String[i] != '\0'; ++i){
 		OLED_ShowChar(ScreenX + i * 8, ScreenY, String[i], Color);
@@ -472,7 +440,7 @@ void OLED_Line(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t Scr
 void OLED_Square(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t Fill, OLED_ColorTypeDef Color){
 	uint16_t i, j;
 	uint8_t pageData = (uint8_t)0x00 - Color,
-			YOffset = /*8 - */((ScreenY2 - ScreenY1) % 8);
+			YOffset = 8 - ((ScreenY2 - ScreenY1) % 8);
 	if (ScreenX1 > ScreenX2 || ScreenY1 > ScreenY2){
 		return;
 	}
@@ -481,7 +449,7 @@ void OLED_Square(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t S
 			for (j = ScreenY1; j <= ScreenY2 - 8; j += 8){
 				OLED_WritePage(i, j, pageData);
 			}
-			OLED_WritePage(i, j, OLED_ReadPage(i, j) | (pageData >> YOffset));
+			OLED_WritePage(i, j, pageData >> YOffset);
 		}
 		return;
 	}
@@ -584,4 +552,80 @@ void OLED_Graph(uint8_t ScreenX, uint8_t ScreenY, uint8_t Width, uint8_t Height,
 	}
 }
 
+void OLED_SetDisplayMode(OLED_DisplayMode dispmode){
+	switch(dispmode){
+		case Default:
+			OLED_ColorFrameProcess = OLED_ColorFrameProcess_Default;
+			OLED_DotProcess = OLED_DotProcess_Default;
+		break;
+		case Xor:
+			OLED_ColorFrameProcess = OLED_ColorFrameProcess_Xor;
+			OLED_DotProcess = OLED_DotProcess_Xor;
+		break;
+		default:
+		break;
+	}
+}
+
 #endif
+
+void OLED_Init(void)
+{
+	uint32_t i, j;
+	
+	//上电延时
+	for (i = 0; i < 1000; i++) {
+		for (j = 0; j < 1000; j++);
+	}
+	
+	OLED_I2C_Init();			//端口初始化
+	
+	OLED_WriteCommand(0xAE);	//关闭显示
+	
+	OLED_WriteCommand(0xD5);	//设置显示时钟分频比/振荡器频率
+	OLED_WriteCommand(0x80);
+	
+	OLED_WriteCommand(0xA8);	//设置多路复用率
+	OLED_WriteCommand(0x3F);
+	
+	OLED_WriteCommand(0xD3);	//设置显示偏移
+	OLED_WriteCommand(0x00);
+	
+	OLED_WriteCommand(0x40);	//设置显示开始行
+	
+	OLED_WriteCommand(0xA1);	//设置左右方向，0xA1正常 0xA0左右反置
+	
+	OLED_WriteCommand(0xC8);	//设置上下方向，0xC8正常 0xC0上下反置
+
+	OLED_WriteCommand(0xDA);	//设置COM引脚硬件配置
+	OLED_WriteCommand(0x12);
+	
+	OLED_WriteCommand(0x81);	//设置对比度控制
+	OLED_WriteCommand(0xCF);
+
+	OLED_WriteCommand(0xD9);	//设置预充电周期
+	OLED_WriteCommand(0xF1);
+
+	OLED_WriteCommand(0xDB);	//设置VCOMH取消选择级别
+	OLED_WriteCommand(0x30);
+
+	OLED_WriteCommand(0xA4);	//设置整个显示打开/关闭
+
+	OLED_WriteCommand(0xA6);	//设置正常/倒转显示
+
+	OLED_WriteCommand(0x8D);	//设置充电泵
+	OLED_WriteCommand(0x14);
+
+	OLED_WriteCommand(0xAF);	//开启显示
+		
+	OLED_ClearScreen();			//OLED清屏
+	
+#ifdef OLED_BUFFER_MODE
+
+	OLED_ColorFrameProcess = OLED_ColorFrameProcess_Default;
+	OLED_DotProcess = OLED_DotProcess_Default;
+	OLED_ClearBuffer();
+	OLED_BufferLineUpdFlag = 0;
+	
+#endif
+}
