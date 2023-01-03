@@ -1,6 +1,11 @@
 #ifndef __OLED_H__
 #define __OLED_H__
-#include "stm32f10x.h"                  // Device header
+//#include "stm32f10x.h"                  // Device header
+#include <Arduino.h>
+
+#ifdef __cplusplus
+extern "C"{
+#endif
 
 #define OLED_BUFFER_MODE				// 定义启用输出缓冲
 #define OLED_BUFFER_CLEAR				// 是否在每次Refresh后清除buffer中的内容
@@ -15,7 +20,7 @@ void OLED_ClearScreen(void);
 
 #ifndef OLED_BUFFER_MODE
 void OLED_Shell_ShowChar(uint8_t Line, uint8_t Column, char Char);
-void OLED_Shell_ShowStr(uint8_t Line, uint8_t Column, char *String);
+void OLED_Shell_ShowString(uint8_t Line, uint8_t Column, char *String);
 void OLED_Shell_ShowNum(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
 void OLED_Shell_ShowSignedNum(uint8_t Line, uint8_t Column, int32_t Number, uint8_t Length);
 void OLED_Shell_ShowHex(uint8_t Line, uint8_t Column, uint32_t Number, uint8_t Length);
@@ -32,15 +37,15 @@ typedef enum{
 typedef enum{
 	Default = 0,
 	Xor = 1
-}OLED_DisplayMode;
+}OLED_DisplayModeSettings;
 
 void OLED_ClearBuffer(void);
 void OLED_Refresh(void);
-void OLED_SetDisplayMode(OLED_DisplayMode dispmode);
+void OLED_DisplayModeSetup(OLED_DisplayModeSettings mode);
 
 void OLED_Dot(uint8_t ScreenX, uint8_t ScreenY, OLED_ColorTypeDef Color);
 void OLED_Line(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, OLED_ColorTypeDef Color);
-void OLED_Square(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t Fill, OLED_ColorTypeDef Color);
+void OLED_Matrix(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t Fill, OLED_ColorTypeDef Color);
 void OLED_FilletMatrix(uint8_t ScreenX1, uint8_t ScreenY1, uint8_t ScreenX2, uint8_t ScreenY2, uint8_t radius, uint8_t Fill, OLED_ColorTypeDef Color);
 void OLED_Circle(uint8_t ScreenX, uint8_t ScreenY, uint16_t radius, uint8_t Fill, OLED_ColorTypeDef Color);		// TODO：实现填充圆的绘制（目前：画一个普通的空白的圆形）
 
@@ -55,9 +60,14 @@ void OLED_WritePage(uint8_t ScreenX, uint8_t ScreenY, uint8_t pageData);
 uint8_t OLED_ReadPage(uint8_t ScreenX, uint8_t ScreenY);
 void OLED_Graph(uint8_t ScreenX, uint8_t ScreenY, uint8_t Width, uint8_t Height, uint8_t *Graph);
 
+#endif	// OLED_BUFFER_MODE
+
 void OLED_WriteCommand(uint8_t Command);
 void OLED_WriteData(uint8_t Data);
 void OLED_SetCursor(uint8_t OLED_X, uint8_t OLED_Y);
-#endif	// OLED_BUFFER_MODE
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif	// __OLED_H__
